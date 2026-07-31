@@ -1,0 +1,15 @@
+# molecule=coronene nprocs=1 repeat=5 — ordres de grandeur
+Method	Molecule	NAtoms	NProcs	t_energy_s	t_energy_grad_s	t_hessian_estimated_s	t_optimisation_s	n_steps	Status
+DFTB2	coronene	36	1	0.082	0.107	23.2	nan	-1	ok;ok;non mesure
+DFTB3	coronene	36	1	0.125	0.130	28.2	nan	-1	ok;ok;non mesure
+IPEA1	coronene	36	1	0.192	0.350	75.9	nan	-1	ok;ok;non mesure
+PM6	coronene	36	1	0.149	0.173	37.5	nan	-1	ok;ok;non mesure
+PM7	coronene	36	1	0.145	0.151	32.8	nan	-1	ok;ok;non mesure
+RM1	coronene	36	1	0.127	0.162	35.2	nan	-1	ok;ok;non mesure
+g-xTB	coronene	36	1	0.444	66.094	14342.4	nan	-1	ok;ok;non mesure
+HF-3C	coronene	36	1	20.764	76.891	16685.3	nan	-1	ok;ok;non mesure
+B97-3C	coronene	36	1	63.934	242.671	52659.6	nan	-1	ok;ok;non mesure
+R2SCAN-3C	coronene	36	1	105.844	284.807	61803.1	nan	-1	ok;ok;non mesure
+PBEH-3C	coronene	36	1	336.007	878.095	190546.6	nan	-1	ok;ok;non mesure
+B3LYP-3C	coronene	36	1	365.810	847.875	183988.9	nan	-1	ok;ok;non mesure
+WB97X-3C	coronene	36	1	1981.775	3843.897	834125.6	nan	-1	ok;ok;non mesure
