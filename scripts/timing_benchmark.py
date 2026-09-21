@@ -29,6 +29,27 @@ One option measures what is otherwise estimated:
                 starting point and on the optimiser, and is to be read as an
                 indication.
 
+Two options were added for the size-scaling campaign of 15-16 September 2026:
+
+  --no-grad     measures t_sp alone; t_grad and the estimate of the Hessian are
+                then nan. This is what gives a size column (ovalene,
+                dicoronylene, circumcircumcoronene) to a table that compares
+                single points only.
+  --tag         a label inserted in the name of the output file and of the
+                working directory, so that two concurrent streams measuring the
+                same method on the same molecule cannot write the same files.
+
+COLD AND WARM SINGLE POINTS
+---------------------------
+ORCA re-reads its own orca.gbw (AutoStart, MOREAD) unless told not to, so that
+from the second trial of --repeat on, the SCF starts from a density already
+converged for the SAME geometry, which no real workflow ever does. NoAutoStart
+is now added to every ORCA input, and every trial therefore starts from the
+model density: that is the cost of a COLD single point. The coronene campaign of
+29 July 2026, which produced data/timings_coronene.txt, was measured WITHOUT the
+keyword, that is warm; data/timings_size_scaling.txt is cold. The two files are
+not interchangeable, and the difference reaches a factor of 4 on B97-3C.
+
 The settings of the calculators reproduce exactly those of the production
 scripts (benchmark-approximate.py for the semi-empirical and tight-binding
 methods, benchmark-gxtb.py for g-xTB, benchmark-3C.py for the composite ones).
@@ -46,6 +67,7 @@ Usage:
     python3 timing_benchmark.py DFTB3 PM7        # a subset
     python3 timing_benchmark.py --with-opt       # with the optimisation
     python3 timing_benchmark.py --molecule pyrene
+    python3 timing_benchmark.py --no-grad --molecule dicoronylene
 """
 
 import argparse
@@ -156,10 +178,26 @@ def make_calc(method, workdir, charge=0, forces=False):
 
     if method in COMPOSITE:
         from ase.calculators.orca import ORCA, OrcaProfile
+        # NoAutoStart: without it ORCA re-reads its own orca.gbw (AutoStart,
+        # MOREAD) from the second trial of --repeat on, and the SCF converges in
+        # two cycles on a density already converged for the SAME geometry, which
+        # no real workflow does. Every trial therefore starts from the model
+        # density: this is the cost of a cold single point. The coronene campaign
+        # of 29 July 2026 was measured WITHOUT this keyword, that is warm.
+        #
+        # HUECKEL for WB97X-3C: with ORCA 6.1.1 the model-potential guess (the
+        # default) aborts on dicoronylene inside orca_guess ("error with the
+        # V-matrix from which there is no recovery", shark_setup_ri.cpp;
+        # reproduced in serial and on two MPI ranks, 15 September 2026) while it
+        # goes through on coronene. The extended Hueckel guess goes through; it
+        # is imposed at ALL sizes so that the times remain comparable. The other
+        # composite methods keep the ORCA default (B97-3C already uses EHT).
+        guess = " HUECKEL" if method == "WB97X-3C" else ""
         return ORCA(charge=charge, mult=1,
                     directory=workdir,
                     profile=OrcaProfile(command=ORCA_BIN),
-                    orcasimpleinput=f"{method} EnGrad" if forces else method,
+                    orcasimpleinput=(f"{method} NoAutoStart{guess} EnGrad" if forces
+                                     else f"{method} NoAutoStart{guess}"),
                     orcablocks="%pal nprocs 1 end \n%maxcore 4000")
 
     if method in SEMI_EMPIRICAL:                      # PM6, PM7, RM1
@@ -273,9 +311,10 @@ def timed(label, fn, repeat=1):
             times.append(time.perf_counter() - t0)
             break
         times.append(time.perf_counter() - t0)
+    ordered = "  trials: " + " ".join(f"{t:.3f}" for t in times)
     times.sort()
     dt = times[len(times) // 2]
-    spread = f"  [{times[0]:.3f}-{times[-1]:.3f}]" if repeat > 1 else ""
+    spread = (f"  [{times[0]:.3f}-{times[-1]:.3f}]" + ordered) if repeat > 1 else ""
     print(f"    {label:14} {dt:10.3f} s   {status}{spread}")
     return dt, status
 
@@ -288,20 +327,22 @@ def start_geometry(molecule, method):
     at equilibrium. The choice of the structure is therefore of no consequence
     to the measurement.
     """
-    for d in ("structures/optimized",):
+    here = os.path.dirname(os.path.abspath(__file__))
+    dirs = ("structures/optimized", os.path.join(here, os.pardir, "geometries"))
+    for d in dirs:
         g = f"{d}/{molecule}_{method}_neutral_bfgs.xyz"
         if os.path.isfile(g):
             return g
     import glob
-    for d in ("structures/optimized",):
+    for d in dirs:
         c = sorted(glob.glob(f"{d}/{molecule}_*_neutral_bfgs.xyz"))
         if c:
             return c[0]
-    print(f"    aucune geometrie disponible pour {molecule}")
+    print(f"    no geometry available for {molecule}")
     return None
 
 
-def run(method, molecule, with_opt=False, repeat=5):
+def run(method, molecule, with_opt=False, repeat=5, no_grad=False, tag=""):
     print(f"--- {method}")
     if not available(method):
         print("    binaire ou parametres absents, methode ignoree")
@@ -311,7 +352,11 @@ def run(method, molecule, with_opt=False, repeat=5):
     if geom is None:
         return None
 
-    base = f"timing/{molecule}_{method}"
+    # The working directory carries the --tag label: two concurrent streams
+    # measuring the same method on the same molecule (the HF-3C controls of the
+    # September campaign) would otherwise write the same orca.out and make each
+    # other fail with an ASE ParseError.
+    base = f"timing/{molecule}_{method}{'_' + tag if tag else ''}"
     natoms = len(read(geom))
 
     # 1. energy alone
@@ -321,20 +366,25 @@ def run(method, molecule, with_opt=False, repeat=5):
                                            a.get_potential_energy()),
                        repeat=repeat)
 
-    # 2. energy + gradient: the primitive repeated by optimisation and Hessian
-    b = read(geom); b.center()
-    b.calc = make_calc(method, base + "_grad", forces=True)
-    t_grad, s_grad = timed("energie+grad", lambda: (reset_calc(b.calc),
-                                                    b.get_forces()),
-                           repeat=repeat)
-
-    # cost of the Hessian: estimated, never measured. ase.vibrations proceeds by
-    # finite differences of the forces, that is 6 N + 1 gradient evaluations;
-    # measuring it would only repeat t_grad, for several hours per method.
+    # 2. energy + gradient: the primitive repeated by optimisation and Hessian.
+    #    Skipped with --no-grad; t_grad and the estimate of the Hessian are then
+    #    nan and t_sp alone is measured.
     n_grad_hess = 6 * natoms + 1
-    t_hess_est = n_grad_hess * t_grad
-    print(f"    {'hessienne':14} {t_hess_est:10.1f} s   estime "
-          f"({n_grad_hess} x t_grad)")
+    t_grad, s_grad, t_hess_est = float("nan"), "non mesure", float("nan")
+    if not no_grad:
+        b = read(geom); b.center()
+        b.calc = make_calc(method, base + "_grad", forces=True)
+        t_grad, s_grad = timed("energie+grad", lambda: (reset_calc(b.calc),
+                                                        b.get_forces()),
+                               repeat=repeat)
+
+        # cost of the Hessian: estimated, never measured. ase.vibrations
+        # proceeds by finite differences of the forces, that is 6 N + 1 gradient
+        # evaluations; measuring it would only repeat t_grad, for several hours
+        # per method.
+        t_hess_est = n_grad_hess * t_grad
+        print(f"    {'hessienne':14} {t_hess_est:10.1f} s   estime "
+              f"({n_grad_hess} x t_grad)")
 
     t_opt, nsteps, s_opt = float("nan"), -1, "non mesure"
     if with_opt:
@@ -358,6 +408,14 @@ def main():
     p.add_argument("--with-opt", action="store_true",
                    help="also measure a complete optimisation (indicative: the "
                         "number of steps depends on the path, not the method)")
+    p.add_argument("--no-grad", action="store_true",
+                   help="measure the energy alone: t_grad and the estimate of "
+                        "the Hessian are nan")
+    p.add_argument("--tag", default="",
+                   help="label inserted in the name of the output file and of "
+                        "the working directory, so that concurrent streams "
+                        "cannot write the same files (the name is stamped to "
+                        "the second)")
     p.add_argument("--molecule", default="coronene",
                    help="reference molecule (default: coronene)")
     p.add_argument("methods", nargs="*", default=None,
@@ -372,10 +430,12 @@ def main():
 
     methods = args.methods or ALL_METHODS
     out = f"timings_{args.molecule}_serial" \
+          f"{'_' + args.tag if args.tag else ''}" \
           f"_{time.strftime('%Y%m%d-%H%M%S')}.txt"
     with open(out, "w") as f:
         f.write(f"# molecule={args.molecule} nprocs=1 "
-                f"repeat={args.repeat} — ordres de grandeur\n")
+                f"repeat={args.repeat} grad={'non' if args.no_grad else 'oui'} "
+                f"— ordres de grandeur\n")
         f.write("\t".join(["Method", "Molecule", "NAtoms", "NProcs",
                            "t_energy_s", "t_energy_grad_s",
                            "t_hessian_estimated_s", "t_optimisation_s",
@@ -383,7 +443,8 @@ def main():
 
     print(f"Molecule : {args.molecule}   coeurs : 1   sortie : {out}\n")
     for m in methods:
-        r = run(m, args.molecule, with_opt=args.with_opt, repeat=args.repeat)
+        r = run(m, args.molecule, with_opt=args.with_opt, repeat=args.repeat,
+                no_grad=args.no_grad, tag=args.tag)
         if r is None:
             continue
         with open(out, "a") as f:

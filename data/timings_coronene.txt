@@ -1,4 +1,12 @@
 # molecule=coronene nprocs=1 repeat=5 — ordres de grandeur
+# Coronene only, one core, 29 July 2026. These single points are WARM: ORCA
+# re-read its own orca.gbw between the trials of --repeat (AutoStart), so that
+# from the second trial on the SCF started from an already converged density.
+# t_energy_grad_s is the quantity this file is for, and it is little affected
+# (the gradient is a fixed post-SCF cost); t_energy_s is not comparable with
+# the cold single points of timings_size_scaling.txt, measured on 15-16
+# September 2026 with NoAutoStart, in a different machine state, and over four
+# sizes. Do not mix the two files.
 Method	Molecule	NAtoms	NProcs	t_energy_s	t_energy_grad_s	t_hessian_estimated_s	t_optimisation_s	n_steps	Status
 DFTB2	coronene	36	1	0.082	0.107	23.2	nan	-1	ok;ok;non mesure
 DFTB3	coronene	36	1	0.125	0.130	28.2	nan	-1	ok;ok;non mesure

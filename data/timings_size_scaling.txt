@@ -1,0 +1,53 @@
+# Cold single points (NoAutoStart), one core, 15-16 September 2026,
+# Xeon E5-1650 v2, ORCA 6.1.1, DFTB+ 23.1, MOPAC 23.0.1, g-xTB (preliminary).
+# Median of 3 trials (composite methods, g-xTB) or 5 (fast methods);
+# WB97X-3C on C96H24: one single trial (9.7 h).
+# HF-3C on coronene: median of the nine initial control runs of streams 1 to 9.
+# Sources: streams 3-4 (fast methods, g-xTB, HF-3C), streams 5-9 (composite
+#   methods, ovalene, C96H24), stream 8b (g-xTB on C96H24).
+# HF-3C/coronene controls: 16.2 to 17.9 s at the start of the streams (five
+#   streams under load), 13.5 to 14.6 s at the end (one to three streams left):
+#   concurrency costs up to 25 %, and the absolute times carry part of it.
+# alpha: slope of ln t_sp against ln N_atoms over the four sizes; alpha_corr:
+#   the same after subtraction of the fixed start-up overhead (0.034 s), fast
+#   methods only. Times in seconds; nan where not applicable.
+# Molecules: coronene C24H12 (36 atoms), ovalene C32H14 (46),
+#   dicoronylene C48H20 (68), circumcircumcoronene C96H24 (120).
+# The sources column keeps the labels of the campaign as it was run. Each fluxN
+# was one concurrent stream, pinned by taskset on a distinct physical core (never
+# two streams on the two SMT siblings of one core), started and ended by an
+# HF-3C/coronene control run; controles-initiaux(x9) are the nine such controls
+# made at the start of the streams, whose median is the HF-3C/coronene entry.
+# What each stream measured, all with timing_benchmark.py --no-grad --tag fluxN:
+#   flux3   coronene PBEH-3C B3LYP-3C R2SCAN-3C B97-3C HF-3C (repeat 3);
+#           dicoronylene B3LYP-3C R2SCAN-3C HF-3C (3)
+#   flux4   coronene and dicoronylene: the six fast methods (5), g-xTB (3),
+#           and B97-3C on dicoronylene (3)
+#   flux5   WB97X-3C on coronene then dicoronylene (3)
+#   flux6   coronene then dicoronylene: B97-3C R2SCAN-3C PBEH-3C B3LYP-3C (3)
+#   flux7   ovalene, all thirteen methods (5 fast, 3 the rest)
+#   flux8   C96H24: the six fast methods (5), g-xTB (3),
+#           HF-3C B97-3C R2SCAN-3C B3LYP-3C (3)
+#   flux8b  g-xTB on C96H24, remeasured alone on core 0 after a fix to the
+#           g-xTB output reader (no per-atom table above about a hundred atoms)
+#   flux9   C96H24: PBEH-3C (3) then WB97X-3C (1 trial, 9.7 h)
+# On 15 September at 15h45 a test loop running beside the campaign killed the ORCA
+# processes of streams 1 to 4 by name. What survived is what this column cites:
+# the fast methods and g-xTB of stream 4, and HF-3C on dicoronylene from stream 3.
+# Everything else those streams held was remeasured by streams 5 to 9, which is
+# why no flux1 or flux2 appears. Their initial HF-3C controls had already run and
+# are part of the nine above.
+Method	t_sp_coronene_36	t_sp_ovalene_46	t_sp_dicoronylene_68	t_sp_C96H24_120	alpha	alpha_corr	ratio_120_36	sources
+DFTB2	0.086	0.128	0.199	0.922	1.94	2.30	10.7	flux4,flux7,flux4,flux8
+DFTB3	0.125	0.174	0.271	1.091	1.78	2.01	8.7	flux4,flux7,flux4,flux8
+RM1	0.132	0.216	0.396	2.311	2.35	2.57	17.5	flux4,flux7,flux4,flux8
+PM7	0.127	0.199	0.466	2.952	2.63	2.87	23.2	flux4,flux7,flux4,flux8
+PM6	0.158	0.255	0.678	3.750	2.66	2.84	23.7	flux4,flux7,flux4,flux8
+IPEA1	0.168	0.244	0.543	1.928	2.05	2.22	11.5	flux4,flux7,flux4,flux8
+g-xTB	0.388	0.677	1.057	5.949	2.21	2.27	15.3	flux4,flux7,flux4,flux8b
+HF-3C	17.315	28.743	69.782	365.553	2.54	nan	21.1	controles-initiaux(x9),flux7,flux3,flux8
+B97-3C	151.108	250.504	541.010	2114.246	2.19	nan	14.0	flux6,flux7,flux6,flux8
+R2SCAN-3C	198.796	263.660	680.557	2430.149	2.14	nan	12.2	flux6,flux7,flux6,flux8
+B3LYP-3C	337.619	585.483	1176.023	4879.187	2.19	nan	14.5	flux6,flux7,flux6,flux8
+PBEH-3C	406.070	707.251	1427.973	5674.823	2.17	nan	14.0	flux6,flux7,flux6,flux9
+WB97X-3C	2307.606	4111.036	8328.120	34917.840	2.23	nan	15.1	flux5,flux7,flux5,flux9

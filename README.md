@@ -9,7 +9,7 @@ This repository contains the optimized geometries, the raw total energies and th
 ## Contents
 
 ```
-geometries/   312 optimized structures, XYZ format, Angstrom
+geometries/   313 optimized structures, XYZ format, Angstrom
 data/         raw total energies and zero-point energies, eV
 scripts/      generation and analysis scripts
 ```
@@ -22,9 +22,17 @@ Naming: `<molecule>_<method>_<species>_bfgs.xyz`
 - **methods** (13): DFTB2, DFTB3, IPEA1, PM6, PM7, RM1, g-xTB, HF-3C, B97-3C, R2SCAN-3C, PBEH-3C, B3LYP-3C, WB97X-3C
 - **species** (3): neutral, cation, dication
 
-8 × 13 × 3 = 312 files. Coordinates are in Angstrom. All structures were relaxed with the ASE BFGS optimizer to a maximum force of 5 × 10⁻⁴ eV/Å.
+8 × 13 × 3 = 312 files, plus the one structure described just below. Coordinates are in Angstrom. All structures were relaxed with the ASE BFGS optimizer to a maximum force of 5 × 10⁻⁴ eV/Å.
 
 Charges and multiplicities are implicit in the species label: neutral = 0/singlet, cation = +1/doublet, dication = +2/singlet, except for the coronene dication whose ground state is a triplet.
+
+One further structure sits outside that grid:
+
+```
+circumcircumcoronene_DFTB3_neutral_bfgs.xyz    C96H24, 120 atoms
+```
+
+It belongs to the cost measurement only, not to the benchmark set: no ionization energy is reported for it, and only its neutral is needed, since the cost of an evaluation does not depend on the charge. It is a zigzag hexagonal flake of the coronene family (37 hexagons, honeycomb construction, C–C 1.42 Å then H at 1.09 Å), relaxed with DFTB3/3ob in 24 BFGS steps to the same 5 × 10⁻⁴ eV/Å: planar, D6h, C–C 1.364 to 1.444 Å. The same construction gives coronene back for n = 2. All thirteen methods were timed from this one geometry.
 
 ### data/
 
@@ -36,7 +44,8 @@ Tab-separated, one row per molecule and method. Energies in eV.
 | `results_g-xTB.txt`            | g-xTB                                                                                    |
 | `results_composite.txt`        | HF-3C, B97-3C, R2SCAN-3C, PBEH-3C, B3LYP-3C, WB97X-3C                                    |
 | `spin_contamination_HF-3C.txt` | ⟨S²⟩ and ROHF/UHF energy differences for the HF-3C open-shell species                    |
-| `timings_coronene.txt`         | computational cost of one energy and one energy-plus-gradient evaluation, all 13 methods |
+| `timings_coronene.txt`         | cost of one energy and one energy-plus-gradient evaluation on coronene, all 13 methods   |
+| `timings_size_scaling.txt`     | cost of one energy evaluation at four sizes, 36 to 120 atoms, all 13 methods             |
 
 Columns of the three `results_*.txt` files:
 
@@ -66,6 +75,27 @@ Two conventions used throughout the article are applied by the analysis script a
 1. The zero-point energies of g-xTB are absent, as vibrational frequencies could not be computed with the preliminary version used. All g-xTB ionization energies are therefore reported without zero-point correction.
 2. xTB-IPEA requires the empirical correction of 4.8455 eV per ionization step prescribed by the authors of the method; it is subtracted once for the first and second ionization energies and twice for the double ionization energy.
 
+#### The two cost files
+
+They were measured a month and a half apart, under conditions that are not the same, and they are not interchangeable.
+
+`timings_coronene.txt` (29 July 2026) is the source of Table S7. It holds `t_energy_s` and `t_energy_grad_s` on coronene alone, and the Hessian cost derived from the latter as (6N + 1) × t_grad. Its single points are **warm**: ORCA re-reads its own `orca.gbw` between the trials of `--repeat` unless told not to, so that from the second trial on the SCF starts from a density already converged for the same geometry. `t_energy_grad_s`, the quantity the file is for, is little affected, the gradient being a fixed post-SCF cost that a good initial density does not speed up.
+
+`timings_size_scaling.txt` (15–16 September 2026) is the source of the cost-against-size figure. Its single points are **cold**: `NoAutoStart` is now added to every ORCA input, so each trial starts from the model density, as any real workflow does. It holds `t_sp` alone — measured with `--no-grad`, no gradient and no Hessian — at four sizes:
+
+```
+coronene              C24H12    36 atoms
+ovalene               C32H14    46 atoms
+dicoronylene          C48H20    68 atoms
+circumcircumcoronene  C96H24   120 atoms
+```
+
+together with `alpha`, the slope of ln t against ln N over the four sizes, `alpha_corr`, the same after subtraction of the fixed start-up overhead of 0.034 s that only matters for the fast methods, and `ratio_120_36`. The three derived columns follow from the four times and can be recomputed from them.
+
+The coronene column was remeasured rather than taken from July, for two reasons: it is cold where July was warm, and ORCA itself ran about twice as slowly in July as in September for an unidentified reason, while the fast methods were unchanged (DFTB2 0.084 s against 0.082 s). A single machine state therefore carries the whole table. The two effects do not cancel, and the July and September coronene columns differ by factors of 0.8 to 2.4 depending on the method.
+
+The last sizes of each stream were measured with less of the machine busy, the HF-3C control runs putting the cost of concurrency at up to 25 %; that lowers the exponents by at most 0.2.
+
 ### scripts/
 
 | file                          | purpose                                                                                             |
@@ -76,13 +106,22 @@ Two conventions used throughout the article are applied by the analysis script a
 | `spin_contamination_HF-3C.py` | ⟨S²⟩ and ROHF/UHF diagnostic for the HF-3C open-shell species                                       |
 | `check_results.py`            | checks the physical consistency of the deposited energies                                           |
 | `analysis.jl`                 | regenerates Tables 1 to 3, S2, S3, S4, S6 and S7 and both figures from `data/`, and writes them out |
-| `timing_benchmark.py`         | measures the computational cost of each method; this is what produced `data/timings_coronene.txt`   |
+| `timing_benchmark.py`         | measures the computational cost of each method; produced both `data/timings_*.txt`                  |
+| `figure_cost_vs_size.jl`      | draws the cost-against-size figure from `data/timings_size_scaling.txt`                             |
 | `gxtb.py`                     | ASE calculator for g-xTB, required by `benchmark-gxtb.py` and `timing_benchmark.py`                 |
 
 Three traps were met while timing the methods, each of which silently produced a plausible but wrong result, and each of which is documented in the comments of `timing_benchmark.py`: ASE never adds a gradient keyword to the ORCA input, so the
 forces must be requested explicitly; the ASE MOPAC and g-xTB calculators request the gradient by default, so the energy-only step has to disable it; and `Calculator.reset()` does not exist on the calculator family ORCA belongs to. Anyone reusing the script should keep those in mind.
 
 `timing_benchmark.py` measures one energy and one energy-plus-gradient evaluation, always on a single core, and derives the cost of a Hessian from the latter as (6N + 1) × t_grad rather than measuring it. Earlier versions could also run in parallel and could time the frequencies directly; both were removed, the first because wall-clock times obtained on different numbers of cores do not compare, the second because measuring the Hessian only repeats the gradient for several hours per method. A file of measured frequencies for naphthalene, obtained with that earlier version, was deposited with a previous release and has been withdrawn, the present script no longer being able to produce it.
+
+Three more things were learned in September 2026, when the measurement was extended to four sizes, and each is documented in the comments of the scripts:
+
+- ORCA restarts from its own converged density unless `NoAutoStart` is given, which makes every trial after the first a warm one. The keyword is now always added, and `--no-grad` was added with it, to measure `t_sp` alone at sizes where a gradient is not wanted.
+- With ORCA 6.1.1 the default model-potential guess aborts for ωB97X-3C on dicoronylene inside `orca_guess` (*error with the V-matrix from which there is no recovery*) while it goes through on coronene. The extended Hückel guess goes through, and is imposed on that method at every size so that the times stay comparable. The other composite methods keep the ORCA default.
+- The g-xTB binary stops printing its per-atom table beyond about a hundred atoms, on which `gxtb.py` raised `UnboundLocalError` although the calculation had run and the energy was correct. `read_charges_dipole` now returns `None` when the table is absent.
+
+Concurrent streams measuring the same method on the same molecule used to write the same working directory and make each other fail; `--tag` now labels both the working directory and the output file.
 
 The comments of the scripts are in English, their runtime messages in French.
 
@@ -126,6 +165,18 @@ julia scripts/analysis.jl
 
 The `.tex` files hold the rows of the present work only, and the numbers alone: the tabular preamble, the thin space of the thousands and the `$-$` of the negative values belong to the manuscript. The literature rows of Tables 1 to 3 are quoted from the cited references and are not reproduced here, no more than the xTB-GFN2 row of Table S4, which is read from the COMPAS database. Both figures come out byte for byte identical to the published ones.
 
+The cost-against-size figure is drawn by a script of its own, since it rests on `data/timings_size_scaling.txt` and on nothing `analysis.jl` reads:
+
+```
+julia scripts/figure_cost_vs_size.jl
+```
+
+| written to `output/`                                     | content                                                        |
+|----------------------------------------------------------|----------------------------------------------------------------|
+| `figure_cost_vs_size.png`, `figure_cost_vs_size.pdf`     | single-point wall time against number of atoms, log-log, 300 dpi |
+
+It needs `Plots` alone, already installed by the line above. Circles mark the fast methods and squares the composite ones, the colours are those of the other figures, and the number in brackets after each label is the effective exponent α. It too comes out byte for byte identical to the published figure.
+
 Tables S1 and S5 are not written. S1 is the content of `data/results_*.txt` as it stands, and S5 that of `data/spin_contamination_HF-3C.txt`, the two differences it reports having been taken by the script that produced that file. Neither involves an operation on the deposited numbers.
 
 One caveat on Table S4. ΔZPE is computed here at full precision and rounded once, at printing. The published table does not do so throughout: its DFTB2, xTB-IPEA, PM6, PM7 and RM1 rows are the difference of the two zero-point energies already rounded to three decimals, which shifts fifteen of its ninety-six values by 0.001 eV. The DFTB3 row and the six composite rows are at full precision, as here.
@@ -165,6 +216,8 @@ The ionization energies and the statistical metrics are not recomputed here; `an
 - DFTB+ 23.1 (DFTB2, DFTB3, xTB-IPEA)
 - OpenMOPAC 23.0.1 (PM6, PM7, RM1)
 - g-xTB, preliminary g-xTB(EEQ BC) build of 12 August 2025
+
+The energies were produced with those versions. The cost measurements were made on one machine, a Xeon E5-1650 v2 under Ubuntu 24.04, with ASE 3.28 and ORCA 6.1.1 in September 2026; the absolute times are proper to it, the ratios between methods much less so.
  
 The g-xTB executable is a preliminary version that is available here: https://github.com/grimme-lab/g-xtb .
 

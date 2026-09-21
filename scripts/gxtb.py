@@ -242,15 +242,26 @@ class Gxtb(FileIOCalculator):
                 #print('Warning: did not find charges')
                 #return None, None
         """
+        # The g-xTB binary does not print the per-atom table (charges,
+        # coordination numbers) beyond about a hundred atoms: on C96H24
+        # (120 atoms) chargestart stayed undefined and read_results raised
+        # UnboundLocalError, although the calculation had run and the energy
+        # file was correct. Without the table we return None for the charges
+        # and the dipole, which read_results knows how to ignore.
+        chargestart = dipolestart = None
         for n, line in enumerate(lines):
             if 'at'in line and 'q' in line and 'CN':
                 chargestart = n + 1
                 break
+        if chargestart is None:
+            return None, None
 
         for n in range(chargestart,len(lines)):
             if 'dipole moment  X         Y          Z' in lines[n]:
                 dipolestart = n + 1
                 break
+        if dipolestart is None:
+            return None, None
         
         lines2 = lines[dipolestart]
         dipole = np.array(lines2.split()[0:3], dtype=float) * Bohr
