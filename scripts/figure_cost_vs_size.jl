@@ -68,11 +68,6 @@ plt = plot(size=(640, 540), dpi=300, framestyle=:box, legend=false,
            guidefontsize=12, tickfontsize=10, left_margin=4Plots.mm, bottom_margin=3Plots.mm,
            right_margin=2Plots.mm, top_margin=2Plots.mm)
 
-# duration marks, discreet
-for (y, lab) in ((60.0, "1 min"), (3600.0, "1 h"))
-    hline!(plt, [y], color=:gray55, linestyle=:dash, linewidth=0.8)
-    annotate!(plt, 32.5, y * 1.35, text(lab, 8, :gray40, :left))
-end
 # formula above each size
 for (n, f) in zip(N, formulas)
     annotate!(plt, n, 7.0e4, text(f, 9, :gray20, :center))
