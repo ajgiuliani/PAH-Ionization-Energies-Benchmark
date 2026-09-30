@@ -75,13 +75,15 @@ Two conventions used throughout the article are applied by the analysis script a
 1. The zero-point energies of g-xTB are absent, as vibrational frequencies could not be computed with the preliminary version used. All g-xTB ionization energies are therefore reported without zero-point correction.
 2. xTB-IPEA requires the empirical correction of 4.8455 eV per ionization step prescribed by the authors of the method; it is subtracted once for the first and second ionization energies and twice for the double ionization energy.
 
+The statistics rest on the molecules for which an experimental value is retained: seven for the first ionization energy (dicoronylene has none), six for the second (fluorene has none, and the naphthalene value, derived from charge-stripping data, is set aside) and six for the double ionization energy (ovalene and dicoronylene have none). The submitted version used five for the double ionization energy, anthracene having been left out by mistake; the revised version, and the present scripts, include it. The experimental values and their quoted uncertainties are the arrays `IE*_EXP` and `IE*_UNC` at the top of `analysis.jl`.
+
 #### The two cost files
 
 They were measured a month and a half apart, under conditions that are not the same, and they are not interchangeable.
 
-`timings_coronene.txt` (29 July 2026) is the source of Table S7. It holds `t_energy_s` and `t_energy_grad_s` on coronene alone, and the Hessian cost derived from the latter as (6N + 1) × t_grad. Its single points are **warm**: ORCA re-reads its own `orca.gbw` between the trials of `--repeat` unless told not to, so that from the second trial on the SCF starts from a density already converged for the same geometry. `t_energy_grad_s`, the quantity the file is for, is little affected, the gradient being a fixed post-SCF cost that a good initial density does not speed up.
+`timings_coronene.txt` (29 July 2026) was the source of Table S7 of the submitted version, which the revised version replaces with Figure S1. It is kept because it is the only measurement of the gradient, on which the discussion of the cost of the complete workflow rests. It holds `t_energy_s` and `t_energy_grad_s` on coronene alone, and the Hessian cost derived from the latter as (6N + 1) × t_grad. Its single points are **warm**: ORCA re-reads its own `orca.gbw` between the trials of `--repeat` unless told not to, so that from the second trial on the SCF starts from a density already converged for the same geometry. `t_energy_grad_s`, the quantity the file is for, is little affected, the gradient being a fixed post-SCF cost that a good initial density does not speed up.
 
-`timings_size_scaling.txt` (15–16 September 2026) is the source of the cost-against-size figure. Its single points are **cold**: `NoAutoStart` is now added to every ORCA input, so each trial starts from the model density, as any real workflow does. It holds `t_sp` alone — measured with `--no-grad`, no gradient and no Hessian — at four sizes:
+`timings_size_scaling.txt` (15–16 September 2026) is the source of Figure S1, the cost-against-size figure. Its single points are **cold**: `NoAutoStart` is now added to every ORCA input, so each trial starts from the model density, as any real workflow does. It holds `t_sp` alone — measured with `--no-grad`, no gradient and no Hessian — at four sizes:
 
 ```
 coronene              C24H12    36 atoms
@@ -105,9 +107,10 @@ The last sizes of each stream were measured with less of the machine busy, the H
 | `benchmark-3C.py`             | production script for the composite methods (ASE + ORCA)                                            |
 | `spin_contamination_HF-3C.py` | ⟨S²⟩ and ROHF/UHF diagnostic for the HF-3C open-shell species                                       |
 | `check_results.py`            | checks the physical consistency of the deposited energies                                           |
-| `analysis.jl`                 | regenerates Tables 1 to 3, S2, S3, S4, S6 and S7 and both figures from `data/`, and writes them out |
+| `analysis.jl`                 | regenerates Tables 1 to 3, S2, S3, S4 and S6, Figure 2 and the graphical ToC from `data/`          |
+| `resampling.jl`               | resolution of the statistical metrics: regenerates Tables S7 and S8 (sample size, experimental uncertainty, combined) |
 | `timing_benchmark.py`         | measures the computational cost of each method; produced both `data/timings_*.txt`                  |
-| `figure_cost_vs_size.jl`      | draws the cost-against-size figure from `data/timings_size_scaling.txt`                             |
+| `figure_cost_vs_size.jl`      | draws Figure S1, the cost-against-size figure, from `data/timings_size_scaling.txt`                 |
 | `gxtb.py`                     | ASE calculator for g-xTB, required by `benchmark-gxtb.py` and `timing_benchmark.py`                 |
 
 Three traps were met while timing the methods, each of which silently produced a plausible but wrong result, and each of which is documented in the comments of `timing_benchmark.py`: ASE never adds a gradient keyword to the ORCA input, so the
@@ -159,7 +162,6 @@ julia scripts/analysis.jl
 | `tableS3_metrics.tex`                                | MSE, MAE, RMSE and σ for the thirteen methods                         |
 | `tableS4_zpe.tex`                                    | zero-point energies of the neutral, and ΔZPE                          |
 | `tableS6_topology.tex`                               | deviations along the linear-acene and pericondensed subseries         |
-| `tableS7_cost.tex`                                   | cost of one energy evaluation, relative to DFTB2                      |
 | `box.png`                                            | Figure 2, box plots of the errors                                     |
 | `gToC.png`                                           | the graphical table of contents                                       |
 
@@ -173,9 +175,31 @@ julia scripts/figure_cost_vs_size.jl
 
 | written to `output/`                                     | content                                                        |
 |----------------------------------------------------------|----------------------------------------------------------------|
-| `figure_cost_vs_size.png`, `figure_cost_vs_size.pdf`     | single-point wall time against number of atoms, log-log, 300 dpi |
+| `figure_cost_vs_size.png`, `figure_cost_vs_size.pdf`     | Figure S1, single-point wall time against number of atoms, log-log, 300 dpi |
 
-It needs `Plots` alone, already installed by the line above. Circles mark the fast methods and squares the composite ones, the colours are those of the other figures, and the number in brackets after each label is the effective exponent α. It too comes out byte for byte identical to the published figure.
+It needs `Plots` alone, already installed by the line above. Circles mark the fast methods and squares the composite ones, the colours are those of the other figures, and the number in brackets after each label is the effective exponent α, the raw slope over the four sizes (the `alpha` column of the data file). It too comes out byte for byte identical to the published figure.
+
+### Resolution of the statistical metrics
+
+The metrics rest on six or seven molecules, and the reference values carry experimental uncertainties of up to 0.2 eV. `resampling.jl` estimates how precisely the mean absolute error (MAE) of each method is known, as 95 % half-widths (eV):
+
+```
+julia scripts/resampling.jl
+```
+
+- **(A) experimental uncertainty alone**: each reference value is replaced by a draw from N(e_i, u_i²), the calculated values being held fixed, and the MAE is recomputed;
+- **(B) sample size alone**: the molecules are drawn with replacement among themselves (bootstrap) and the MAE is recomputed;
+- **(C) both combined**: the two sources being independent, C = √(A² + B²).
+
+(A) and (B) use 2 × 10⁵ draws each, with a fixed seed, so the output is reproducible; changing the seed moves the values by at most 0.01 eV. The script includes `analysis.jl` for the data, the ionization energies and the uncertainties, so nothing is duplicated.
+
+| written to `output/`         | content                                                                                   |
+|------------------------------|-------------------------------------------------------------------------------------------|
+| `tableS7_resolution.tex`     | Table S7, the three half-widths, median over the thirteen methods                        |
+| `tableS8_combined.tex`       | Table S8, the MAE of each method and its three half-widths                               |
+| `resolution_full.txt`        | the same per method, with the RMSE and the analytic standard error s/√n as a check on (B) |
+
+With the median combined half-widths U (0.05, 0.11 and 0.25 eV), two methods can be told apart only if their MAE differ by more than about √2 U, that is 0.1, 0.15 and 0.3 eV for the first, second and double ionization energies: the thresholds used in the article.
 
 Tables S1 and S5 are not written. S1 is the content of `data/results_*.txt` as it stands, and S5 that of `data/spin_contamination_HF-3C.txt`, the two differences it reports having been taken by the script that produced that file. Neither involves an operation on the deposited numbers.
 
