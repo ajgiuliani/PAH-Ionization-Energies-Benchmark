@@ -20,8 +20,12 @@
 #
 #     table1_IE1.tex         table2_IE2.tex        table3_IEd.tex
 #     tableS2_ionization.tex tableS3_metrics.tex   tableS4_zpe.tex
-#     tableS6_topology.tex   tableS7_cost.tex
+#     tableS6_topology.tex
 #     box.png                gToC.png
+#
+# Tables S7 and S8 (resolution of the metrics) are written by
+# resampling.jl, and Figure S1 (cost against size) by
+# figure_cost_vs_size.jl.
 #
 # The .tex files contain the rows of the present work only, and the
 # numbers alone: the tabular preamble, the thin space of the thousands
@@ -65,6 +69,11 @@ isdir(OUT) || mkpath(OUT)
 # deliberately excluded: it is not a direct measurement but a value derived
 # by Schroeder et al. from the data of Tobita et al., and its true
 # uncertainty is much larger than quoted. See the article for the discussion.
+#
+# The double ionization energy of anthracene (20.1 +/- 0.2 eV, Hartman et al.,
+# ref. in the article) IS available and is retained: the double-ionization
+# benchmark therefore rests on six molecules, not five. (An earlier version of
+# this array marked it NaN by mistake.)
 
 const MOLECULES = ["naphthalene", "fluorene", "anthracene", "pyrene",
                    "tetracene", "coronene", "ovalene", "dicoronylene"]
@@ -72,7 +81,17 @@ const CARBON    = [10, 13, 14, 16, 18, 24, 32, 48]
 
 const IE1_EXP = [8.144, 7.91, 7.439, 7.426, 6.97, 7.29, 6.71, NaN]
 const IE2_EXP = [  NaN,  NaN,  11.7,  11.7,  10.9, 10.95, 10.0, 9.1]
-const IED_EXP = [ 21.5, 21.0,   NaN,  19.8,  18.6,  18.5,  NaN, NaN]
+const IED_EXP = [ 21.5, 21.0,  20.1,  19.8,  18.6,  18.5,  NaN, NaN]
+
+# Quoted experimental uncertainties (1 sigma, in eV), aligned with the arrays
+# above. NaN wherever the reference value itself is absent or excluded. These
+# are the parenthesised uncertainties of the cited measurements; ovalene's first
+# ionization energy carries no quoted uncertainty in the source, and 0.05 eV is
+# assumed (it changes nothing at the level of two decimals). They are used only
+# by the resampling analysis (scripts/resampling.jl).
+const IE1_UNC = [0.001, 0.02, 0.006, 0.001, 0.05, 0.03, 0.05, NaN]
+const IE2_UNC = [  NaN,  NaN,   0.1,   0.1,  0.1, 0.05,  0.1, 0.2]
+const IED_UNC = [  0.2,  0.2,   0.2,   0.2,  0.2,  0.2,  NaN, NaN]
 
 # Order used throughout: approximate methods first, then composite methods.
 const METHODS = ["DFTB2", "DFTB3", "IPEA1", "PM6", "PM7", "RM1", "g-xTB",
@@ -107,18 +126,6 @@ function load_energies()
 end
 
 const E = load_energies()
-
-# Cost of one energy evaluation, single core, coronene. Only the ratio to DFTB2
-# is published: the absolute times depend on the machine, the ratio much less.
-function load_timings()
-    path = joinpath(ROOT, "data", "timings_coronene.txt")
-    isfile(path) || error("missing data file: $path")
-    t = Dict{String,Float64}()
-    for r in CSV.File(path, delim = '\t', comment = "#")
-        t[String(r.Method)] = r.t_energy_s
-    end
-    return t
-end
 
 # ---------------------------------------------------------------------
 # 3. Ionization energies, DeltaSCF
@@ -156,6 +163,10 @@ const IDX = Dict(:first  => subset(IE1_EXP),
                  :second => subset(IE2_EXP),
                  :double => subset(IED_EXP))
 const EXP = Dict(:first => IE1_EXP, :second => IE2_EXP, :double => IED_EXP)
+const UNC = Dict(:first => IE1_UNC, :second => IE2_UNC, :double => IED_UNC)
+
+"Quoted experimental uncertainties (eV) of the retained molecules, in IDX order."
+uncertainties(which) = [UNC[which][i] for i in IDX[which]]
 
 "Signed errors of method `m` against experiment, ZPE-corrected."
 errors(m, which) = [ie(m, MOLECULES[i], which; zpe = true) - EXP[which][i]
@@ -273,24 +284,6 @@ function write_zpe_table()
         for m in ZPE_METHODS
             vals = [@sprintf("%.3f", E[(m, mol)].Z_c - E[(m, mol)].Z_n) for mol in MOLECULES]
             println(io, pretty(m), " & ", join(vals, " & "), " \\\\")
-        end
-    end
-end
-
-# Table S7: cost of one energy evaluation on coronene, normalised to DFTB2, the
-# least expensive method of the set. Below ten the ratio is given to one
-# decimal, above it to the unit: the measurement does not carry more.
-function write_cost_table()
-    t = load_timings()
-    ref = t["DFTB2"]
-    open(joinpath(OUT, "tableS7_cost.tex"), "w") do io
-        println(io, "% Table S7 - cost of one energy evaluation on coronene, single core,")
-        println(io, "% relative to DFTB2. From data/timings_coronene.txt.")
-        println(io, "% Method & relative cost")
-        for m in METHODS
-            r = t[m] / ref
-            println(io, pretty(m), " & ",
-                    r < 10 ? @sprintf("%.1f", r) : @sprintf("%d", round(Int, r)), " \\\\")
         end
     end
 end
@@ -448,7 +441,6 @@ function main()
     df = write_metrics_table()
     write_zpe_table()
     write_topology_table()
-    write_cost_table()
     figure_boxplots()
     figure_gtoc(df)
 
