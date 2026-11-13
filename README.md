@@ -1,8 +1,6 @@
 # Ionization energies of polycyclic aromatic hydrocarbons — benchmark dataset
 
-Supporting dataset for *Ionization Energies of Polycyclic Aromatic Hydrocarbons:
-Benchmarking Semi-Empirical, Tight Binding and Composite Methods*, A. Giuliani and
-H. R. Hrodmarsson, ChemPhysChem.
+Supporting dataset for *Ionization Energies of Polycyclic Aromatic Hydrocarbons: Benchmarking Semi-Empirical, Tight Binding and Composite Methods, A. Giuliani and H. R. Hrodmarsson, ChemPhysChem 2026, 27, e70622. https://doi.org/10.1002/cphc.70622.
 
 This repository contains the optimized geometries, the raw total energies and the analysis scripts from which every number of the article and of its Supporting Information can be regenerated.
 
